@@ -3,7 +3,7 @@ require "heroku/command/config"
 
 class Heroku::Command::Config < Heroku::Command::Base
 
-  # config:pull
+  # config:pull [FILENAME]
   #
   # pull heroku config vars down to the local environment
   #
@@ -11,18 +11,19 @@ class Heroku::Command::Config < Heroku::Command::Base
   #
   # -i, --interactive  # prompt whether to overwrite each config var
   # -o, --overwrite    # overwrite existing config vars
-  # -f, --filename     # specify a filename to use instead of ".env"
   #
   def pull
+    filename = shift_argument || ".env"
+    validate_arguments!
     interactive = options[:interactive]
     overwrite   = options[:overwrite]
 
     config = merge_config(remote_config, local_config, interactive, overwrite)
-    write_local_config config
+    write_local_config(config, filename)
     display "Config for #{app} written to #{filename}"
   end
 
-  # config:push
+  # config:push [FILENAME]
   #
   # push local config vars to heroku
   #
@@ -30,26 +31,21 @@ class Heroku::Command::Config < Heroku::Command::Base
   #
   # -i, --interactive  # prompt whether to overwrite each config var
   # -o, --overwrite    # overwrite existing config vars
-  # -f, --filename     # specify a filename to use instead of ".env"
   #
   def push
+    filename = shift_argument || ".env"
+    validate_arguments!
     interactive = options[:interactive]
     overwrite   = options[:overwrite]
 
-    config = merge_config(local_config, remote_config, interactive, overwrite)
-    write_remote_config config
+    config = merge_config(local_config(filename), remote_config, interactive, overwrite)
+    write_remote_config(config)
     display "Config in #{filename} written to #{app}"
   end
 
 private ######################################################################
 
-  def filename
-    name = options[:filename]
-    return name unless name.nil? || name.empty?
-    ".env"
-  end
-
-  def local_config
+  def local_config(filename)
     File.read(filename).split("\n").inject({}) do |hash, line|
       if line =~ /\A([A-Za-z_0-9]+)=(.*)\z/
         hash[$1] = $2
@@ -64,19 +60,19 @@ private ######################################################################
     api.get_config_vars(app).body
   end
 
-  def write_local_config(config)
+  def write_local_config(config, filename)
     temp_filename = "#{filename}.#{Time.now.utc.to_i}.tmp"
-    
+
     File.open(temp_filename, "w") do |file|
       config.keys.sort.each do |key|
         file.puts "#{key}=#{config[key]}"
       end
     end
-    
+
     File.delete(filename) if File.exists?(filename)
-    
+
     File.rename(temp_filename, filename)
-    
+
   end
 
   def write_remote_config(config)
@@ -104,4 +100,3 @@ private ######################################################################
   end
 
 end
-
